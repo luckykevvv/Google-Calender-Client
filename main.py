@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import datetime
 import os.path
+import os
 import pickle
 import sqlite3
 
@@ -19,7 +20,7 @@ from tzlocal import get_localzone
 
 
 # If modifying these scopes, delete the file token.json.
-
+here=os.path.dirname(__file__)
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 creds = None
     # Create a new event object
@@ -28,9 +29,17 @@ lg = ui_login.Login()
 ma = ui_main.WinGUI()
 of = ui_on.WinGUI()
 
-if os.path.exists('user.db'):
-    conn2 = sqlite3.connect('user.db') 
+if os.path.exists(here+'/user.db'):
+    conn2 = sqlite3.connect(here+'/user.db') 
     user = conn2.cursor()
+
+def resourcePath(relativePath):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        basePath = os.environ['_MEIPASS2']
+    except Exception:
+        basePath = os.path.abspath(".")
+    return os.path.join(basePath, relativePath)
 
 class user:
     usernumber=0
@@ -46,8 +55,8 @@ def login(auto):
     global service
     service = None
     global close
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    if os.path.exists(resourcePath("token.json")):
+        creds = Credentials.from_authorized_user_file(resourcePath("token.json"), SCOPES)
         if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
         # If there are no (valid) credentials available, let the user log in.
@@ -58,13 +67,13 @@ def login(auto):
             ma.deiconify()
         except HttpError as error:
             print('An error occurred: %s' % error)
-    elif os.path.exists('token.json')==False:
-        flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+    elif os.path.exists(resourcePath("token.json"))==False:
+        flow = InstalledAppFlow.from_client_secrets_file(resourcePath("credentials.json"), SCOPES)
         creds = flow.run_local_server(port=0)
         print("3")
         if auto=="1":
             # Save the credentials for the next run
-            with open('token.json', 'w') as token:
+            with open(resourcePath("token.json"), 'w') as token:
                 token.write(creds.to_json())
                 lg.destroy()
                 ma.deiconify()
@@ -83,8 +92,8 @@ def autolog():
     global service
     global close
     service = None
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    if os.path.exists(resourcePath("token.json")):
+        creds = Credentials.from_authorized_user_file(resourcePath("token.json"), SCOPES)
         if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
         try:
@@ -98,13 +107,13 @@ def autolog():
             showevent()
         except HttpError as error:
             print('An error occurred: %s' % error)
-    elif os.path.exists('token.json')==False:
+    elif os.path.exists(resourcePath("token.json"))==False:
         print("2")
         ma.withdraw()
             
 def logoff():
-    if os.path.exists('token.json'):
-        os.remove('token.json') 
+    if os.path.exists(resourcePath("token.json")):
+        os.remove(resourcePath("token.json")) 
         try:
             ma.destroy()
         except:
@@ -181,10 +190,10 @@ def showevent():
     global we
     we={}
     print('Getting the upcoming 10 events')
-    if os.path.exists('test.db'):
-        os.remove('test.db') 
-    if os.path.exists('test.db')==False:
-        conn = sqlite3.connect('test.db')
+    if os.path.exists(resourcePath("test.db")):
+        os.remove(resourcePath("test.db")) 
+    if os.path.exists(resourcePath("test.db"))==False:
+        conn = sqlite3.connect(resourcePath("test.db"))
         data = conn.cursor() 
         sql_text_1 = '''CREATE TABLE scores 
             (ID TEXT, 
@@ -206,17 +215,11 @@ def showevent():
         getevent()
     for event in events:
         n=n+1
-        conn = sqlite3.connect('test.db')
+        conn = sqlite3.connect(resourcePath("test.db"))
         data = conn.cursor() 
         start = event['start'].get('dateTime', event['start'].get('date'))
         end = event['end'].get('dateTime', event['end'].get('date'))
         print(n,event['summary'],event['description'],event['location'],start,end,event['id'])
-        q =  eventc(event['summary'],event['location'],event['description'],start,end,event['id'])
-        event2[n] = q
-        we[n]= event['id']
-        f = open('somedata', 'wb')
-        pickle.dump(event2[n], f) # serialize and save object
-        f.close()
         z = [(str(event['id']),event['summary'],event['description'],event['location'],start,end,n)]
         data.executemany('INSERT INTO scores VALUES (?,?,?,?,?,?,?)', z) 
         conn.commit()
@@ -241,9 +244,7 @@ def select():
     print("<Double-Button-1>事件未处理") 
 
 def getevent():
-        #f = open('somedata', 'rb')
-        #a=pickle.load(f)
-        conn = sqlite3.connect('test.db')
+        conn = sqlite3.connect(resourcePath("test.db"))
         data = conn.cursor() 
         sql_text_3 = "SELECT * FROM scores WHERE ID!='1'" 
         data.execute(sql_text_3) 
@@ -291,9 +292,9 @@ def closeof():
     ma.destroy()
 
 def offlinemode():
-    offline = sqlite3.connect('offline') 
+    offline = sqlite3.connect(resourcePath("offline")) 
     offline.close()
-    if os.path.exists('offline'):
+    if os.path.exists(resourcePath("offline")):
         clearofftable()
         ma.withdraw()
         of.deiconify()
@@ -305,17 +306,17 @@ def offlinemode():
 
 def onlinemode():
     try:
-        os.remove('offline') 
+        os.remove(resourcePath("offline")) 
     except:
         pass
-    if os.path.exists('offline')==False:
+    if os.path.exists(resourcePath("offline"))==False:
         cleartable()
         autolog()
         ma.deiconify()
         of.withdraw()
         
 def getoffevent():
-        conn = sqlite3.connect('test.db')
+        conn = sqlite3.connect(resourcePath("test.db"))
         data = conn.cursor() 
         sql_text_3 = "SELECT * FROM scores WHERE ID!='1'" 
         data.execute(sql_text_3) 
@@ -339,11 +340,11 @@ lg.protocol('WM_DELETE_WINDOW', closelg)
 ma.protocol('WM_DELETE_WINDOW', closema)
 of.protocol('WM_DELETE_WINDOW', closeof)
 
-if os.path.exists('offline'):
+if os.path.exists(resourcePath("offline")):
     lg.destroy()
     ma.withdraw()
     getoffevent()
-if os.path.exists('offline')==False:
+if os.path.exists(resourcePath("offline"))==False:
     of.withdraw()
     autolog()
     
@@ -354,10 +355,6 @@ ma.widget_dic["tk_button_lhzezyzr"].configure(command=lambda:deleteevent())
 ma.widget_dic["tk_button_lhzfmuo6"].configure(command=lambda:refresh())
 of.widget_dic["tk_button_lhgy4y0v"].configure(command=lambda:onlinemode())
 
-f = open('somedata', 'rb')
-a=pickle.load(f)
-print(a.show_ID())
-print(a.show_ID())
 
 lg.mainloop()
 ma.mainloop()
