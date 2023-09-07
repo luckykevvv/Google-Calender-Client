@@ -3,10 +3,13 @@ from __future__ import print_function
 import datetime
 import os.path
 import os
-import pickle
+import datetime
 import sqlite3
 
 from tkinter import *
+import time
+from timeloop import Timeloop
+from datetime import timedelta
 import tkinter.messagebox
 from ui import ui_login
 from ui import ui_main
@@ -17,10 +20,11 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from tzlocal import get_localzone
+from win10toast import ToastNotifier
+toaster = ToastNotifier()
 
 
 # If modifying these scopes, delete the file token.json.
-here=os.path.dirname(__file__)
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 creds = None
     # Create a new event object
@@ -29,24 +33,14 @@ lg = ui_login.Login()
 ma = ui_main.WinGUI()
 of = ui_on.WinGUI()
 
-if os.path.exists(here+'/user.db'):
-    conn2 = sqlite3.connect(here+'/user.db') 
-    user = conn2.cursor()
-
 def resourcePath(relativePath):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     try:
-        basePath = os.environ['_MEIPASS2']
+        basePath = os.path.dirname(__file__)
     except Exception:
         basePath = os.path.abspath(".")
+    
     return os.path.join(basePath, relativePath)
-
-class user:
-    usernumber=0
-    def __init__(self, name, ID):
-      self.name = name
-      self.ID = ID
-      user.usernumber += 1
 
 def login(auto):
     # The file token.json stores the user's access and refresh tokens, and is
@@ -190,10 +184,10 @@ def showevent():
     global we
     we={}
     print('Getting the upcoming 10 events')
-    if os.path.exists(resourcePath("test.db")):
-        os.remove(resourcePath("test.db")) 
-    if os.path.exists(resourcePath("test.db"))==False:
-        conn = sqlite3.connect(resourcePath("test.db"))
+    if os.path.exists(resourcePath("events.db")):
+        os.remove(resourcePath("events.db")) 
+    if os.path.exists(resourcePath("events.db"))==False:
+        conn = sqlite3.connect(resourcePath("events.db"))
         data = conn.cursor() 
         sql_text_1 = '''CREATE TABLE scores 
             (ID TEXT, 
@@ -213,9 +207,25 @@ def showevent():
         print('No upcoming events found.')
         tkinter.messagebox.showinfo(title='Notice',message='No upcoming events found')
         getevent()
+    q=0
+    global datedata
+    global desdata
+    global summarydata
+    datedata={}
+    summarydata={}
+    desdata={}
     for event in events:
+        datedata[q]=event['start'].get('dateTime')
+        summarydata[q]=event['summary']
+        desdata[q]=event['description']
+        for colour in datedata:
+            print (datedata[colour])
+        print(datedata[q])
+        q=q+1
         n=n+1
-        conn = sqlite3.connect(resourcePath("test.db"))
+        print(len(datedata))
+        print(q)
+        conn = sqlite3.connect(resourcePath("events.db"))
         data = conn.cursor() 
         start = event['start'].get('dateTime', event['start'].get('date'))
         end = event['end'].get('dateTime', event['end'].get('date'))
@@ -244,7 +254,7 @@ def select():
     print("<Double-Button-1>事件未处理") 
 
 def getevent():
-        conn = sqlite3.connect(resourcePath("test.db"))
+        conn = sqlite3.connect(resourcePath("events.db"))
         data = conn.cursor() 
         sql_text_3 = "SELECT * FROM scores WHERE ID!='1'" 
         data.execute(sql_text_3) 
@@ -316,7 +326,7 @@ def onlinemode():
         of.withdraw()
         
 def getoffevent():
-        conn = sqlite3.connect(resourcePath("test.db"))
+        conn = sqlite3.connect(resourcePath("events.db"))
         data = conn.cursor() 
         sql_text_3 = "SELECT * FROM scores WHERE ID!='1'" 
         data.execute(sql_text_3) 
@@ -333,7 +343,32 @@ def getoffevent():
 def clearofftable():
     for item in of.widget_dic["tk_table_lhij4qh9"].get_children(): 
         of.widget_dic["tk_table_lhij4qh9"].delete(item)
-        
+
+def notice():
+    m=0
+    print(len(datedata))
+    print(m)
+    while m < len(datedata):
+        n_time_str=datedata[m]
+        n_time=datetime.datetime.strptime(n_time_str, '%Y-%m-%dT%H:%M:%S%z')
+        date_str = n_time.strftime('%Y-%m-%d')
+        time_str = n_time.strftime('%H:%M')
+        result_str = date_str + time_str
+        current_datetime = datetime.datetime.now()
+        current_date_str = current_datetime.strftime('%Y-%m-%d')
+        current_time_str = current_datetime.strftime('%H:%M')
+        current_result_str = current_date_str + current_time_str
+        print(result_str)
+        print(current_result_str)
+        if result_str <= current_result_str:
+            toaster.show_toast(summarydata[m],
+                   desdata[m],
+                   icon_path=None,
+                   duration=5,
+                   threaded=True)
+        m=m+1
+
+    
 lg.btn_google.configure(command=lambda:login(str(lg.v.get())))
 lg.btn_ok.configure(command=lambda:print(str(lg.v.get())))
 lg.protocol('WM_DELETE_WINDOW', closelg)
@@ -347,7 +382,7 @@ if os.path.exists(resourcePath("offline")):
 if os.path.exists(resourcePath("offline"))==False:
     of.withdraw()
     autolog()
-    
+
 ma.widget_dic["tk_button_lhgy4y0v"].configure(command=lambda:guiinfo())
 ma.widget_dic["tk_button_lhgy2vm0"].configure(command=lambda:logoff())
 ma.widget_dic["tk_button_lhzf0v2x"].configure(command=lambda:offlinemode())
@@ -355,6 +390,14 @@ ma.widget_dic["tk_button_lhzezyzr"].configure(command=lambda:deleteevent())
 ma.widget_dic["tk_button_lhzfmuo6"].configure(command=lambda:refresh())
 of.widget_dic["tk_button_lhgy4y0v"].configure(command=lambda:onlinemode())
 
+tl = Timeloop()
+# 定义要定时执行的任务
+@tl.job(interval=timedelta(seconds=10))  # 每10秒执行一次任务
+def my_periodic_job():
+    notice()
+    print("定时任务执行了")
+
+tl.start()
 
 lg.mainloop()
 ma.mainloop()
